@@ -159,7 +159,7 @@ class App(object):
 
 
             if self.InSettings:
-                self.TempController.render()
+                self.Log.debug("FIXME: Settings")
             else:
                 self.Screen.blit(self.Background, (0,0))
                 self.PowerButton.render(self.Screen)
@@ -167,6 +167,7 @@ class App(object):
                 self.TimerControl.render(self.Screen)
                 self.StartStop.Position = (250+self.TimerControl.Rectangle.size[0], 5)
                 self.StartStop.render(self.Screen)
+                self.TempController.render()
 
             pygame.display.flip()
 

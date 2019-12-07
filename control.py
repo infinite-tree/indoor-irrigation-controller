@@ -12,13 +12,33 @@ import widgets
 
 
 PRODUCTION = os.getenv("PRODUCTION")
-DELFAULT_SERIAL_DEVICE = "/dev/ttyUSB0"
+SERIAL_PATTERN = "/dev/ttyUSB*"
 
 UPDATE_DELAY = 5
 
 
 def scale(x, in_min, in_max, out_min, out_max):
     return (x-in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+
+class FakeSerial(object):
+    def __init__(self, log, *args, **kwargs):
+        self.Log = log
+        self.Buffer = "E"
+        return
+
+    def close(self):
+        self.log.debug("FakeSerial.close()")
+        return
+
+    def write(self, value):
+        self.Buffer = str(value)
+        self.log.debug("FakeSerial.write(%s)"%value)
+
+
+    def readline(self):
+        self.log.debug("FakeSerial.readline() -> %s"%self.Buffer.strip())
+        return self.Buffer.strip() + "\n"
 
 
 class Arduino(object):
@@ -37,13 +57,16 @@ class Arduino(object):
         except:
             pass
 
-        serial_devices = glob.glob("/dev/ttyUSB*")
+        serial_devices = glob.glob(SERIAL_PATTERN)
         if len(serial_devices) < 1:
             self.Log.error("No Serial devices detected. Restarting ...")
             subprocess.call("sudo reboot", shell=True)
 
         self.SerialDevice = sorted(serial_devices)[-1]
-        self.Stream = serial.Serial(self.SerialDevice, 57600, timeout=1)
+        if PRODUCTION:
+            self.Stream = serial.Serial(self.SerialDevice, 57600, timeout=1)
+        else:
+            self.Stream = FakeSerial(self.Log)
 
         if self._sendData('I') == 'I':
             return
@@ -56,9 +79,10 @@ class Arduino(object):
         except:
             pass
 
+        # FIXME: still needed or delete?
         # FIXME: match device to the actual
-        subprocess.call("sudo ./usbreset /dev/bus/usb/001/002",
-                        shell=True, cwd=os.path.expanduser("~/"))
+        # subprocess.call("sudo ./usbreset /dev/bus/usb/001/002",
+        #                 shell=True, cwd=os.path.expanduser("~/"))
         time.sleep(2)
         self._newSerial()
 
@@ -104,8 +128,8 @@ class Arduino(object):
                 "float conversion failed for Arduino.getTemperature()")
             return 0.0
 
-    def _controlValve(self, value)
-       if self._sendData(str(value)) == str(value):
+    def _controlValve(self, value):
+        if self._sendData(str(value)) == str(value):
             return True
         return False
 
@@ -440,6 +464,32 @@ class TempControl(object):
         self.Screen = screen
         self.Size = self.Screen.get_size()
 
+        # Recirculation Pump
+        self.Recirculating = False
+        self.RecirculationCenter = (345, 281)
+        self.RecirculationRadius = 30
+
+        # Output and Recirculation Valve
+        self.OutputOpen = False
+        self.OutputPosition = (21, 89)
+        self.ValveSize = (121, 64)
+
+        self.RecirculationValveOpen = False
+        self.RecirculationPosition = (169, 89)
+
+        # Hot and Cold Valves
+        self.HotValvePercent = 0
+        self.HotValvePosition = (21, 335)
+
+        self.ColdValvePercent = 0
+        self.ColdValvePosition = (169, 335)
+
+        # Temperature
+        self.Temperature = 75.0
+        self.TemperaturePosition = (155, 245)
+        self.TemperatureRadius = 40
+
+        self.Font = pygame.font.SysFont("avenir", 30)
         self.LastUpdate = time.time()
         self.Running = False
         self.handleStop()
@@ -462,6 +512,60 @@ class TempControl(object):
             return True
         return False
 
+    def updateStatus(self):
+        # FIXME: implement
+        return
+
     def render(self):
-        surface = pygame.surface.Surface(self.Size)
+        now = int(time.time())
+        if now % 2:
+            self.updateStatus()
+
+        surface = pygame.surface.Surface(self.Size, pygame.SRCALPHA)
+
+        # Recirculation Pump status
+        if self.Recirculating:
+            if now % 2:
+                pygame.draw.circle(surface, widgets.GREEN, self.RecirculationCenter, self.RecirculationRadius, 0)
+
+        # Output Valve Status
+        output_rect = (self.OutputPosition[0], self.OutputPosition[1], self.ValveSize[0], self.ValveSize[1])
+        if self.OutputOpen:
+            if now % 2:
+                pygame.draw.rect(surface, widgets.GREEN, output_rect)
+        else:
+            pygame.draw.rect(surface, widgets.RED, output_rect)
+
+        # Recirculation Valve Status
+        recirculation_rect = (self.RecirculationPosition[0], self.RecirculationPosition[1], self.ValveSize[0], self.ValveSize[1])
+        if self.RecirculationValveOpen:
+            if now % 2:
+                pygame.draw.rect(surface, widgets.GREEN, recirculation_rect)
+        else:
+            pygame.draw.rect(surface, widgets.RED, recirculation_rect)
+
+        # Hot Valve Status
+        if self.HotValvePercent > 0:
+            hot_width = int(self.ValveSize[0] * (self.HotValvePercent/100))
+            hot_rect = (self.HotValvePosition[0], self.HotValvePosition[1], hot_width, self.ValveSize[1])
+            pygame.draw.rect(surface, widgets.GREEN, hot_rect)
+        else:
+            hot_rect = (self.HotValvePosition[0], self.HotValvePosition[1], self.ValveSize[0], self.ValveSize[1])
+            pygame.draw.rect(surface, widgets.RED, hot_rect)
+
+        # Cold Valve Status
+        if self.ColdValvePercent > 0:
+            cold_width = int(self.ValveSize[0] * (self.ColdValvePercent/100))
+            cold_rect = (self.ColdValvePosition[0], self.ColdValvePosition[1], cold_width, self.ValveSize[1])
+            pygame.draw.rect(surface, widgets.GREEN, cold_rect)
+        else:
+            cold_rect = (self.ColdValvePosition[0], self.ColdValvePosition[1], self.ValveSize[0], self.ValveSize[1])
+            pygame.draw.rect(surface, widgets.RED, cold_rect)
+
+        # Temperature
+        pygame.draw.circle(surface, widgets.WHITE, self.TemperaturePosition, self.TemperatureRadius, 0)
+        pygame.draw.circle(surface, widgets.BLACK, self.TemperaturePosition, self.TemperatureRadius, 2)
+        txt_surface = self.Font.render("%d F"%self.Temperature, 1, widgets.BLACK)
+        surface.blit(txt_surface, (self.TemperaturePosition[0]-self.TemperatureRadius/1.5, self.TemperaturePosition[1]-self.TemperatureRadius/2))
+
         self.Screen.blit(surface, (0,0))
