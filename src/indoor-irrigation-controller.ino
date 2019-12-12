@@ -25,15 +25,12 @@
 #define HOT_MIX_CLOSED_INPUT        6
 #define HOT_MIX_OPENED_INPUT        5
 
-// Each open/close valve has a 2 wire control also driven through a driver and contains outputs for limit switches.
-// The valves however will automitcall stop when limits are hit and can be treated as having two simple states:
-//   0,1 = closed
-//   1,0 = open
-// NOTE: if necessary, these can become one wire with an inverting schmitt trigger
-#define RECYCLE_VALVE_CONTROL_A     4
-#define RECYCLE_VALVE_CONTROL_B     3
-#define OUTPUT_VALVE_CONTROL_A      2
-#define OUTPUT_VALVE_CONTROL_B      A0
+// Each open/close valve uses a NC/NO/COM relay and a single wire toggle (open/close) for control
+// Feedback from the two limit switches is tied together. 1 = MOVINNG, 0=STOPPED
+#define RECYCLE_VALVE_CONTROL       4
+#define RECYCLE_VALVE_INPUT         3
+#define OUTPUT_VALVE_CONTROL        2
+#define OUTPUT_VALVE_INPUT          A0
 
 
 // Constants
@@ -77,63 +74,97 @@ void readTemperature() {
 
 void pulseColdOpen() {
     // FIXME: verify direction
+
+    if (COLD_POSITION == VALVE_INCREMENTS) {
+        return;
+    }
     COLD_POSITION++;
-    digitalWrite(COLD_MIX_OUT_A, HIGH);
-    digitalWrite(COLD_MIX_OUT_B, LOW);
 
-    delay(VALVE_PULSE_DELAY);
+    do {
+        digitalWrite(COLD_MIX_OUT_A, HIGH);
+        digitalWrite(COLD_MIX_OUT_B, LOW);
 
-    digitalWrite(COLD_MIX_OUT_A, LOW);
-    digitalWrite(COLD_MIX_OUT_B, LOW);
+        delay(VALVE_PULSE_DELAY);
+
+        digitalWrite(COLD_MIX_OUT_A, LOW);
+        digitalWrite(COLD_MIX_OUT_B, LOW);
+    }
+    while(digitalRead(COLD_MIX_OPENED_INPUT) == LOW && COLD_POSITION == VALVE_INCREMENTS);
 }
 
 void pulseColdClosed() {
     // FIXME: verify direction
+
+    if (COLD_POSITION == 0) {
+        return;
+    }
+
     COLD_POSITION--;
-    digitalWrite(COLD_MIX_OUT_A, LOW);
-    digitalWrite(COLD_MIX_OUT_B, HIGH);
 
-    delay(VALVE_PULSE_DELAY);
+    do { 
+        digitalWrite(COLD_MIX_OUT_A, LOW);
+        digitalWrite(COLD_MIX_OUT_B, HIGH);
 
-    digitalWrite(COLD_MIX_OUT_A, LOW);
-    digitalWrite(COLD_MIX_OUT_B, LOW);
+        delay(VALVE_PULSE_DELAY);
+
+        digitalWrite(COLD_MIX_OUT_A, LOW);
+        digitalWrite(COLD_MIX_OUT_B, LOW);
+
+    }
+    while(digitalRead(COLD_MIX_CLOSED_INPUT) == LOW && COLD_POSITION == 0);
 }
 
 void pulseHotOpen() {
     // FIXME: verify direction
+
+    if (HOT_POSITION == VALVE_INCREMENTS) {
+        return;
+    }
+
     HOT_POSITION++;
-    digitalWrite(HOT_MIX_OUT_A, HIGH);
-    digitalWrite(HOT_MIX_OUT_B, LOW);
 
-    delay(VALVE_PULSE_DELAY);
+    do {
+        digitalWrite(HOT_MIX_OUT_A, HIGH);
+        digitalWrite(HOT_MIX_OUT_B, LOW);
 
-    digitalWrite(HOT_MIX_OUT_A, LOW);
-    digitalWrite(HOT_MIX_OUT_B, LOW);
+        delay(VALVE_PULSE_DELAY);
+
+        digitalWrite(HOT_MIX_OUT_A, LOW);
+        digitalWrite(HOT_MIX_OUT_B, LOW);
+    }
+    while(digitalRead(COLD_MIX_OPENED_INPUT) == LOW && COLD_POSITION == VALVE_INCREMENTS);
 }
 
 void pulseHotClosed() {
     // FIXME: verify direction
+
+    if (HOT_POSITION == 0) {
+        return;
+    }
+
     HOT_POSITION--;
-    digitalWrite(HOT_MIX_OUT_A, LOW);
-    digitalWrite(HOT_MIX_OUT_B, HIGH);
 
-    delay(VALVE_PULSE_DELAY);
+    do {
+        digitalWrite(HOT_MIX_OUT_A, LOW);
+        digitalWrite(HOT_MIX_OUT_B, HIGH);
 
-    digitalWrite(HOT_MIX_OUT_A, LOW);
-    digitalWrite(HOT_MIX_OUT_B, LOW);
+        delay(VALVE_PULSE_DELAY);
+
+        digitalWrite(HOT_MIX_OUT_A, LOW);
+        digitalWrite(HOT_MIX_OUT_B, LOW);
+    }
+    while(digitalRead(HOT_MIX_CLOSED_INPUT) == LOW && HOT_POSITION == 0);
 }
 
 void openOutput() {
     // FIXME: verify direction
-    digitalWrite(OUTPUT_VALVE_CONTROL_A, HIGH);
-    digitalWrite(OUTPUT_VALVE_CONTROL_B, LOW);
+    digitalWrite(OUTPUT_VALVE_CONTROL, HIGH);
     OUTPUT_POSITION = 'O';
 }
 
 void closeOutput() {
     // FIXME: verify direction
-    digitalWrite(OUTPUT_VALVE_CONTROL_A, LOW);
-    digitalWrite(OUTPUT_VALVE_CONTROL_B, HIGH);
+    digitalWrite(OUTPUT_VALVE_CONTROL, LOW);
     OUTPUT_POSITION = 'o';
 }
 
@@ -147,15 +178,13 @@ void stopPump() {
 
 void openRecirculation() {
     // FIXME: verify direction
-    digitalWrite(RECYCLE_VALVE_CONTROL_A, HIGH);
-    digitalWrite(RECYCLE_VALVE_CONTROL_B, LOW);
+    digitalWrite(RECYCLE_VALVE_CONTROL, HIGH);
     RECIRCULATION_POSITION = 'R';
 }
 
 void closeRecirculation() {
     // FIXME: verify direction
-    digitalWrite(RECYCLE_VALVE_CONTROL_A, LOW);
-    digitalWrite(RECYCLE_VALVE_CONTROL_B, HIGH);
+    digitalWrite(RECYCLE_VALVE_CONTROL, LOW);
     RECIRCULATION_POSITION = 'r';
 }
 
@@ -184,6 +213,8 @@ void printValves()
     {
         Serial.print('H');
     }
+
+    // FIXME: add valve status
 
     Serial.print(OUTPUT_POSITION);
     Serial.print(RECIRCULATION_POSITION);
@@ -218,13 +249,13 @@ void setup() {
     pinMode(HOT_MIX_OPENED_INPUT, INPUT_PULLUP);
 
     // Setup water recycle valve (default to closed)
-    pinMode(RECYCLE_VALVE_CONTROL_A, OUTPUT);
-    pinMode(RECYCLE_VALVE_CONTROL_B, OUTPUT);
+    pinMode(RECYCLE_VALVE_CONTROL, OUTPUT);
+    pinMode(RECYCLE_VALVE_INPUT, INPUT_PULLUP);
     closeRecirculation();
 
     //  Setup the Output water valve (default is closed)
-    pinMode(OUTPUT_VALVE_CONTROL_A, OUTPUT);
-    pinMode(OUTPUT_VALVE_CONTROL_B, OUTPUT);
+    pinMode(OUTPUT_VALVE_CONTROL, OUTPUT);
+    pinMode(OUTPUT_VALVE_INPUT, INPUT_PULLUP);
     closeOutput();
 
     // Initialize Variables
