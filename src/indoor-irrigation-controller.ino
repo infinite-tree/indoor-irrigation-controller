@@ -34,10 +34,12 @@
 
 
 // Constants
+#define SEC_TO_MS                   1000
 #define ANALOG_READS                64
 #define VALVE_INCREMENTS            10
-// FIXME: how many seconds for full movement?
-#define VALVE_PULSE_DELAY           2*1000/VALVE_INCREMENTS
+// The docs on these valves say 6 to 8 seconds for full movement
+// But when pulsing, the momentum carries the valve a little further
+#define VALVE_PULSE_DELAY           4*1000/VALVE_INCREMENTS
 
 
 //  Globals
@@ -73,8 +75,6 @@ void readTemperature() {
 
 
 void pulseColdOpen() {
-    // FIXME: verify direction
-
     if (COLD_POSITION == VALVE_INCREMENTS) {
         return;
     }
@@ -89,12 +89,10 @@ void pulseColdOpen() {
         digitalWrite(COLD_MIX_OUT_A, LOW);
         digitalWrite(COLD_MIX_OUT_B, LOW);
     }
-    while(digitalRead(COLD_MIX_OPENED_INPUT) == LOW && COLD_POSITION == VALVE_INCREMENTS);
+    while(digitalRead(COLD_MIX_OPENED_INPUT) == HIGH && COLD_POSITION == VALVE_INCREMENTS);
 }
 
 void pulseColdClosed() {
-    // FIXME: verify direction
-
     if (COLD_POSITION == 0) {
         return;
     }
@@ -111,12 +109,10 @@ void pulseColdClosed() {
         digitalWrite(COLD_MIX_OUT_B, LOW);
 
     }
-    while(digitalRead(COLD_MIX_CLOSED_INPUT) == LOW && COLD_POSITION == 0);
+    while(digitalRead(COLD_MIX_CLOSED_INPUT) == HIGH && COLD_POSITION == 0);
 }
 
 void pulseHotOpen() {
-    // FIXME: verify direction
-
     if (HOT_POSITION == VALVE_INCREMENTS) {
         return;
     }
@@ -132,12 +128,10 @@ void pulseHotOpen() {
         digitalWrite(HOT_MIX_OUT_A, LOW);
         digitalWrite(HOT_MIX_OUT_B, LOW);
     }
-    while(digitalRead(COLD_MIX_OPENED_INPUT) == LOW && COLD_POSITION == VALVE_INCREMENTS);
+    while(digitalRead(HOT_MIX_OPENED_INPUT) == HIGH && HOT_POSITION == VALVE_INCREMENTS);
 }
 
 void pulseHotClosed() {
-    // FIXME: verify direction
-
     if (HOT_POSITION == 0) {
         return;
     }
@@ -153,17 +147,15 @@ void pulseHotClosed() {
         digitalWrite(HOT_MIX_OUT_A, LOW);
         digitalWrite(HOT_MIX_OUT_B, LOW);
     }
-    while(digitalRead(HOT_MIX_CLOSED_INPUT) == LOW && HOT_POSITION == 0);
+    while(digitalRead(HOT_MIX_CLOSED_INPUT) == HIGH && HOT_POSITION == 0);
 }
 
 void openOutput() {
-    // FIXME: verify direction
     digitalWrite(OUTPUT_VALVE_CONTROL, HIGH);
     OUTPUT_POSITION = 'O';
 }
 
 void closeOutput() {
-    // FIXME: verify direction
     digitalWrite(OUTPUT_VALVE_CONTROL, LOW);
     OUTPUT_POSITION = 'o';
 }
@@ -177,13 +169,11 @@ void stopPump() {
 }
 
 void openRecirculation() {
-    // FIXME: verify direction
     digitalWrite(RECYCLE_VALVE_CONTROL, HIGH);
     RECIRCULATION_POSITION = 'R';
 }
 
 void closeRecirculation() {
-    // FIXME: verify direction
     digitalWrite(RECYCLE_VALVE_CONTROL, LOW);
     RECIRCULATION_POSITION = 'r';
 }
@@ -214,13 +204,13 @@ void printValves()
         Serial.print('H');
     }
 
-    // FIXME: add valve status
-
+    // FIXME: add valve status (when in transition)
     Serial.print(OUTPUT_POSITION);
     Serial.print(RECIRCULATION_POSITION);
 
     Serial.println();
 }
+
 
 void setup() {
     // Setup the serial connection

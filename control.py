@@ -1,3 +1,4 @@
+import glob
 import json
 import math
 import os
@@ -5,6 +6,7 @@ import pygame
 from pygame.locals import *
 import pytz
 import serial
+import subprocess
 import time
 
 # local imports
@@ -28,17 +30,17 @@ class FakeSerial(object):
         return
 
     def close(self):
-        self.log.debug("FakeSerial.close()")
+        self.Log.debug("FakeSerial.close()")
         return
 
     def write(self, value):
         self.Buffer = str(value)
-        self.log.debug("FakeSerial.write(%s)"%value)
+        self.Log.debug("FakeSerial.write(%s)"%value)
 
 
     def readline(self):
-        self.log.debug("FakeSerial.readline() -> %s"%self.Buffer.strip())
-        return self.Buffer.strip() + "\n"
+        self.Log.debug("FakeSerial.readline() -> %s"%self.Buffer.strip())
+        return (self.Buffer.strip() + "\n").encode()
 
 
 class Arduino(object):
@@ -57,13 +59,13 @@ class Arduino(object):
         except:
             pass
 
-        serial_devices = glob.glob(SERIAL_PATTERN)
-        if len(serial_devices) < 1:
-            self.Log.error("No Serial devices detected. Restarting ...")
-            subprocess.call("sudo reboot", shell=True)
-
-        self.SerialDevice = sorted(serial_devices)[-1]
         if PRODUCTION:
+            serial_devices = glob.glob(SERIAL_PATTERN)
+            if len(serial_devices) < 1:
+                self.Log.error("No Serial devices detected. Restarting ...")
+                subprocess.call("sudo reboot", shell=True)
+
+            self.SerialDevice = sorted(serial_devices)[-1]
             self.Stream = serial.Serial(self.SerialDevice, 57600, timeout=1)
         else:
             self.Stream = FakeSerial(self.Log)
@@ -163,6 +165,47 @@ class Arduino(object):
     def stopPump(self):
         return self._controlValve('p')
 
+
+class MixingValveControl(object):
+    def __init__(self, pos, log, arduino):
+        self.Position = pos
+        self.Log = log
+        self.Arduino = arduino
+    
+    def handleEvent(self, event):
+        return False
+    
+    def render(self, surface):
+        return
+
+
+class ColdControl(MixingValveControl):
+    pass
+
+
+class HotControl(MixingValveControl):
+    pass
+
+
+class OnOffValveControl(object):
+    def __init__(self, pos, log, arduino):
+        self.Position = pos
+        self.Log = log
+        self.Arduino = arduino
+    
+    def handleEvent(self, event):
+        return False
+    
+    def render(self, surface):
+        return
+
+
+class RecirculationControl(OnOffValveControl):
+    pass
+
+
+class OutputControl(OnOffValveControl):
+    pass
 
 
 
@@ -459,10 +502,11 @@ class Arduino(object):
 
 
 class TempControl(object):
-    def __init__(self, log, screen):
+    def __init__(self, log, arduino, screen):
         self.Log = log
         self.Screen = screen
         self.Size = self.Screen.get_size()
+        self.Arduino = arduino
 
         # Recirculation Pump
         self.Recirculating = False
@@ -569,3 +613,47 @@ class TempControl(object):
         surface.blit(txt_surface, (self.TemperaturePosition[0]-self.TemperatureRadius/1.5, self.TemperaturePosition[1]-self.TemperatureRadius/2))
 
         self.Screen.blit(surface, (0,0))
+
+
+class Settings(object):
+    def __init__(self, log, screen, arduino, return_handler):
+        self.Log = log
+        self.Screen = screen
+        self.Size = screen.get_size()
+        self.Arduino = arduino
+        self.ReturnHandler = return_handler
+
+        self.ReturnButton = widgets.ReturnButton((self.Size[0]-55, 5), self.handleReturn)
+        self.ColdControl = ColdControl((0,0), self.Log, self.Arduino)
+        self.HotControl = HotControl((0, self.Size[1]/2+1), self.Log, self.Arduino)
+        self.RecirculationControl = RecirculationControl((self.Size[0]/2+1,0), self.Log, self.Arduino)
+        self.OutputControl = OutputControl((self.Size[0]/2+1,self.Size[1]/2+1), self.Log, self.Arduino)
+
+    def handleReturn(self):
+        self.ReturnHandler()
+
+    def handleEvent(self, event):
+        if self.ColdControl.handleEvent(event):
+            return True
+        if self.HotControl.handleEvent(event):
+            return True
+        if self.RecirculationControl.handleEvent(event):
+            return True
+        if self.OutputControl.handleEvent(event):
+            return True
+        
+        if event.type == MOUSEBUTTONDOWN:
+            self.ReturnButton.handleClick(event.pos)
+        return True
+    
+    def render(self):
+        surface = pygame.surface.Surface(self.Size)
+        pygame.draw.rect(surface, widgets.WHITE, (0, 0, self.Size[0], self.Size[1]))
+        self.ReturnButton.render(surface)
+        self.ColdControl.render(surface)
+        self.HotControl.render(surface)
+        self.RecirculationControl.render(surface)
+        self.OutputControl.render(surface)
+
+        self.Screen.blit(surface, (0,0))
+

@@ -66,7 +66,9 @@ class App(object):
         self.SettingsButton = widgets.SettingsButton((SCREEN_SIZE[0] - (55*2),5), self.handleSettings)
         self.Font = pygame.font.SysFont("avenir", 18)
 
-        self.TempController = control.TempControl(self.Log, self.Screen)
+        self.Arduino = control.Arduino(self.Log)
+        self.TempController = control.TempControl(self.Log, self.Arduino, self.Screen)
+        self.Settings = control.Settings(self.Log, self.Screen, self.Arduino, self.handleSettings)
 
         #
         # Sensor Widgets
@@ -133,7 +135,8 @@ class App(object):
                 return False
 
             if self.InSettings:
-                self.Log.debug("In settings")
+                # self.Log.debug("In settings")
+                self.Settings.handleEvent(event)
             else:
                 if event.type == MOUSEBUTTONDOWN:
                     self.LastMovement = now
@@ -159,7 +162,8 @@ class App(object):
 
 
             if self.InSettings:
-                self.Log.debug("FIXME: Settings")
+                # self.Log.debug("FIXME: Settings")
+                self.Settings.render()
             else:
                 self.Screen.blit(self.Background, (0,0))
                 self.PowerButton.render(self.Screen)
