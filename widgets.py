@@ -10,6 +10,8 @@ SETTINGS_BTN = os.path.join(IMG_DIR, "settings.png")
 TEMP_BADGE = os.path.join(IMG_DIR, "temp-badge.png")
 UP_BTN = os.path.join(IMG_DIR, "up.png")
 DOWN_BTN = os.path.join(IMG_DIR, "down.png")
+LEFT_BTN = os.path.join(IMG_DIR, "left.png")
+RIGHT_BTN = os.path.join(IMG_DIR, "right.png")
 
 
 WHITE = (255, 255, 255)
@@ -22,10 +24,14 @@ BLUE = (0, 0, 255)
 
 class ImageButton(object):
     ImageFile = None
-    def __init__(self, position, handler):
+    def __init__(self, position, handler, center=False):
         self.Image = pygame.image.load(self.ImageFile)
-        self.Position = position
-        self.Rect = self.Image.get_rect().move(position)
+        if center:
+            s = self.Image.get_size()
+            self.Position = (position[0] - s[0]/2, position[1] - s[1]/2)
+        else:
+            self.Position = position
+        self.Rect = self.Image.get_rect().move(self.Position)
         self.Handler = handler
 
     def render(self, surface, pos=None):
@@ -63,6 +69,14 @@ class UpButton(ImageButton):
 
 class DownButton(ImageButton):
     ImageFile = DOWN_BTN
+
+
+class LeftButton(ImageButton):
+    ImageFile = LEFT_BTN
+
+
+class RightButton(ImageButton):
+    ImageFile = RIGHT_BTN
 
 
 # class TempAndHumidity(object):
@@ -103,18 +117,22 @@ class DownButton(ImageButton):
 
 
 class StartStopButton(object):
-    def __init__(self, position, start_callback, stop_callback):
+    StartText = " START "
+    StopText = " STOP "
+    def __init__(self, position, start_callback, stop_callback, center=False):
         self.Position = position
         self.On = False
         self.StartCallback = start_callback
         self.StopCallback = stop_callback
         self.Font = pygame.font.SysFont("avenir", 48)
+        self.Rectangle = pygame.Rect((0,0,0,0))
+        self.Center = center
 
     def render(self, surface):
         if self.On:
-            text = self.Font.render(" STOP ", 1, BLACK)
+            text = self.Font.render(self.StopText, 1, BLACK)
         else:
-            text = self.Font.render(" START ", 1, BLACK)
+            text = self.Font.render(self.StartText, 1, BLACK)
 
         size = text.get_rect().size
         base_surface = pygame.surface.Surface(size, pygame.SRCALPHA)
@@ -129,8 +147,15 @@ class StartStopButton(object):
         # right line
         pygame.draw.rect(base_surface, BLACK, [size[0]-border, 0, size[0], size[1]])
 
-        surface.blit(base_surface, self.Position)
-        self.Rectangle = pygame.Rect(self.Position[0], self.Position[1], size[0], size[1])
+        if self.Center:
+            rect = (self.Position[0] - size[0]/2,
+                    self.Position[1] - size[1]/2,
+                    size[0],
+                    size[1])
+        else:
+            rect = (self.Position[0], self.Position[1], size[0], size[1])
+        surface.blit(base_surface, (rect[0], rect[1]))
+        self.Rectangle = pygame.Rect(*rect)
 
     def handleClick(self, event_pos):
         # print("Rect: %s, pos: %s"%(self.Rectangle, event_pos))
@@ -141,6 +166,11 @@ class StartStopButton(object):
             else:
                 self.On = True
                 self.StartCallback()
+
+
+class OpenCloseButton(StartStopButton):
+    StartText = " OPEN "
+    StopText = " CLOSE "
 
 
 class TimerControl(object):
@@ -186,3 +216,32 @@ class TimerControl(object):
 
         surface.blit(base_surface, self.Position)
         self.Rectangle = base_surface.get_rect()
+
+
+class MixingValveStatus(object):
+    def __init__(self, position, size, valve_percent_handler, center=False):
+        if center:
+            self.Position = (position[0] - size[0]/2, position[1] - size[1]/2)
+        else:
+            self.Position = position
+        self.Size = size
+        self.GetValvePercent = valve_percent_handler
+        self.Center = center
+        self.LastTime = time.time()
+        self.Percent = 0
+
+    def render(self, surface):
+        # Valve Status
+        now = time.time()
+        if now - self.LastTime > 1:
+            self.Percent = self.GetValvePercent()
+            self.LastTime = now
+
+        if self.Percent > 0:
+            width = int(self.Size[0] * (self.Percent/100))
+            rect = (self.Position[0], self.Position[1], width, self.Size[1])
+            pygame.draw.rect(surface, GREEN, rect)
+        else:
+            rect = (self.Position[0], self.Position[1], self.Size[0], self.Size[1])
+            pygame.draw.rect(surface, RED, rect)
+
