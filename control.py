@@ -17,6 +17,9 @@ PRODUCTION = os.getenv("PRODUCTION")
 SERIAL_PATTERN = "/dev/ttyUSB*"
 
 UPDATE_DELAY = 5
+IDEAL_TEMP = 72.0
+TEMP_THRESHOLD = 2.0
+TEMP_HOLD = 15/UPDATE_DELAY
 
 
 def scale(x, in_min, in_max, out_min, out_max):
@@ -35,8 +38,11 @@ class FakeSerial(object):
             'H': 'H',
             'o': 'o',
             'O': 'O',
+            'P': 'P',
+            'p': 'p',
             'r': 'r',
-            'R': 'R'
+            'R': 'R',
+            'T': '60.0'
         }
         self.Valves = {
             'c': '',
@@ -44,10 +50,11 @@ class FakeSerial(object):
             'o': 'o',
             'r': 'r'
         }
+        self.Temp = 60.0
         self.Last = ''
 
     def close(self):
-        self.Log.debug("FakeSerial.close()")
+        # self.Log.debug("FakeSerial.close()")
         return
 
     def write(self, value):
@@ -62,18 +69,20 @@ class FakeSerial(object):
             self.Valves['c'] = self.Valves['c'] + "C"
         elif self.Last == 'h' and len(self.Valves['h']) > 0:
             self.Valves['h'] = self.Valves['h'][:-1]
-        elif self.Last == 'h' and len(self.Valves['h']) < 10:
+        elif self.Last == 'H' and len(self.Valves['h']) < 10:
             self.Valves['h'] = self.Valves['h'] + "H"
 
-        print(self.Valves)
-        self.Log.debug("FakeSerial.write(%s)"%value)
+        # self.Log.debug("FakeSerial.write(%s)"%value)
 
     def readline(self):
-        if self.Last == 'V':
+        if self.Last == 'T':
+            temp = 75.0 - len(self.Valves['c'])*2 + len(self.Valves['h'])*2
+            send = str(temp)
+        elif self.Last == 'V':
             send = "".join(self.Valves.values())
         else:
             send = self.Commands.get(self.Last, 'E')
-        self.Log.debug("FakeSerial.readline() -> %s"%send)
+        # self.Log.debug("FakeSerial.readline() -> %s"%send)
         return (send + "\n").encode()
 
 
@@ -193,10 +202,10 @@ class Arduino(object):
     def closeRecycle(self):
         return self._controlValve('r')
 
-    def startPump(self):
+    def startRecyclePump(self):
         return self._controlValve('P')
 
-    def stopPump(self):
+    def stopRecyclePump(self):
         return self._controlValve('p')
 
 
@@ -266,9 +275,11 @@ class ColdControl(MixingValveControl):
     
     def handleLeft(self):
         self.Arduino.pulseCloseCold()
+        self.Status.Percent = self.getPercent()
     
     def handleRight(self):
         self.Arduino.pulseOpenCold()
+        self.Status.Percent = self.getPercent()
 
 
 class HotControl(MixingValveControl):
@@ -278,9 +289,11 @@ class HotControl(MixingValveControl):
 
     def handleLeft(self):
         self.Arduino.pulseCloseHot()
+        self.Status.Percent = self.getPercent()
     
     def handleRight(self):
         self.Arduino.pulseOpenHot()
+        self.Status.Percent = self.getPercent()
 
 
 class OnOffValveControl(object):
@@ -355,7 +368,7 @@ class TempControl(object):
 
         # Recirculation Pump
         self.Recirculating = False
-        self.RecirculationCenter = (345, 281)
+        self.RecirculationCenter = (345, 282)
         self.RecirculationRadius = 30
 
         # Output and Recirculation Valve
@@ -379,8 +392,10 @@ class TempControl(object):
         self.TemperatureRadius = 40
 
         self.Font = pygame.font.SysFont("avenir", 30)
-        self.LastUpdate = time.time()
+        self.LastUpdate = 0
+        self.LastControl = 0
         self.Running = False
+        self.updateStatus()
         self.handleStop()
 
     def getHotPercent(self):
@@ -389,31 +404,107 @@ class TempControl(object):
     def getColdPercent(self):
         return self.ColdValvePercent
 
+    def startRecycle(self):
+        self.Recirculating = True
+        self.Arduino.openRecycle()
+        self.Arduino.startRecyclePump()
+
+    def stopRecycle(self):
+        self.Recirculating = False
+        self.Arduino.stopRecyclePump()
+        self.Arduino.closeRecycle()
+
     def handleStart(self):
-        self.Running = True
         self.Log.info("Starting Temp Controller")
-        # HACK/FIXME
-        self.LastUpdate = time.time()
+        self.startRecycle()
+        for x in range(5):
+            self.Arduino.pulseOpenCold()
+            self.Arduino.pulseOpenHot()
+
+        self.Running = True
+        self.AtTemp = 0
+        self.LastControl = time.time()
+        self.updateStatus()
 
     def handleStop(self):
         self.Running = False
+        self.AtTemp = 0
         self.Log.info("Stopping Temp Controller")
-        # HACK/FIXME
+        self.Arduino.closeOutput()
+        self.stopRecycle()
+        for x in range(int(self.HotValvePercent/10)):
+            self.Arduino.pulseCloseHot()
+        for x in range(int(self.ColdValvePercent/10)):
+            self.Arduino.pulseCloseCold()
 
     def handleEvent(self, event):
-        if event.type == MOUSEBUTTONDOWN:
-            # self.ReturnButton.handleClick(event.pos)
-            return True
+        # if event.type == MOUSEBUTTONDOWN:
+        #     self.ReturnButton.handleClick(event.pos)
+        #     return True
         return False
 
     def updateStatus(self):
-        # FIXME: implement
-        return
+        now = time.time()
+        if now - self.LastUpdate > 1:
+            states = self.Arduino.getValveStates()
+            self.HotValvePercent = states['hot']
+            self.ColdValvePercent = states['cold']
+            self.RecirculationValveOpen = (states['recycle'] == "OPEN")
+            self.OutputOpen = (states['output'] == "OPEN")
+            self.Temperature = self.Arduino.getTemperature()
+            self.LastUpdate = now
+        
+        # Control logic
+        # FIXME: the temp seems to go up as more cold is added
+        #        Seems like it is not using the returned temp
+        if self.Running and now - self.LastControl > UPDATE_DELAY:
+            # Make sure water that is out of temp doesn't go to plants
+            if self.Temperature < (IDEAL_TEMP - TEMP_THRESHOLD):
+                if self.OutputOpen:
+                    self.Log.error("Temp got too cold. cutting water")
+                    self.startRecycle()
+                    self.Arduino.closeOutput()
+                    self.AtTemp = 0
+            elif self.Temperature > (IDEAL_TEMP + TEMP_THRESHOLD):
+                if self.OutputOpen:
+                    self.Log.error("Temp got too hot. cutting water")
+                    self.startRecycle()
+                    self.Arduino.closeOutput()
+                    self.AtTemp = 0
+            else:
+                # Open the output once it is ready
+                self.Log.info("Water is at temp")
+                if not self.OutputOpen:
+                    self.AtTemp += 1
+                    if self.AtTemp >= TEMP_HOLD:
+                        self.stopRecycle()
+                        self.Arduino.openOutput()
+
+            # Adjust water mixing to maintain even temp
+            # TODO: This might lead to huge swings since it will tend to
+            #       max out hot and cold first (but we want full pressure/flow)
+            if self.Temperature < IDEAL_TEMP:
+                if self.HotValvePercent > 100:
+                    self.Arduino.pulseOpenHot()
+                elif self.ColdValvePercent > 0:
+                    self.Arduino.pulseCloseCold()
+                else:
+                    # Error state
+                    self.Log.error("Hot is maxed out")
+            elif self.Temperature > IDEAL_TEMP:
+                if self.ColdValvePercent < 100:
+                    self.Arduino.pulseOpenCold()
+                elif self.HotValvePercent > 0:
+                    self.Arduino.pulseCloseHot()
+                else:
+                    # ERROR State
+                    self.Log.error("COLD is maxed out")
+
+            self.LastControl = now
 
     def render(self):
         now = int(time.time())
-        if now % 2:
-            self.updateStatus()
+        self.updateStatus()
 
         surface = pygame.surface.Surface(self.Size, pygame.SRCALPHA)
 
@@ -421,6 +512,8 @@ class TempControl(object):
         if self.Recirculating:
             if now % 2:
                 pygame.draw.circle(surface, widgets.GREEN, self.RecirculationCenter, self.RecirculationRadius, 0)
+        else:
+            pygame.draw.circle(surface, widgets.RED, self.RecirculationCenter, self.RecirculationRadius, 0)
 
         # Output Valve Status
         output_rect = (self.OutputPosition[0], self.OutputPosition[1], self.ValveSize[0], self.ValveSize[1])

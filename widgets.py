@@ -233,7 +233,7 @@ class MixingValveStatus(object):
     def render(self, surface):
         # Valve Status
         now = time.time()
-        if now - self.LastTime > 1:
+        if now - self.LastTime > 3:
             self.Percent = self.GetValvePercent()
             self.LastTime = now
 
