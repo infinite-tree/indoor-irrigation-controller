@@ -54,7 +54,12 @@ class FakeSerial(object):
         self.Last = ''
 
     def close(self):
-        # self.Log.debug("FakeSerial.close()")
+        self.Valves = {
+            'c': '',
+            'h': '',
+            'o': 'o',
+            'r': 'r'
+        }
         return
 
     def write(self, value):
@@ -72,8 +77,6 @@ class FakeSerial(object):
         elif self.Last == 'H' and len(self.Valves['h']) < 10:
             self.Valves['h'] = self.Valves['h'] + "H"
 
-        # self.Log.debug("FakeSerial.write(%s)"%value)
-
     def readline(self):
         if self.Last == 'T':
             temp = 75.0 - len(self.Valves['c'])*2 + len(self.Valves['h'])*2
@@ -82,7 +85,6 @@ class FakeSerial(object):
             send = "".join(self.Valves.values())
         else:
             send = self.Commands.get(self.Last, 'E')
-        # self.Log.debug("FakeSerial.readline() -> %s"%send)
         return (send + "\n").encode()
 
 
@@ -124,10 +126,6 @@ class Arduino(object):
         except:
             pass
 
-        # FIXME: still needed or delete?
-        # FIXME: match device to the actual
-        # subprocess.call("sudo ./usbreset /dev/bus/usb/001/002",
-        #                 shell=True, cwd=os.path.expanduser("~/"))
         time.sleep(2)
         self._newSerial()
 
@@ -455,8 +453,6 @@ class TempControl(object):
             self.LastUpdate = now
         
         # Control logic
-        # FIXME: the temp seems to go up as more cold is added
-        #        Seems like it is not using the returned temp
         if self.Running and now - self.LastControl > UPDATE_DELAY:
             # Make sure water that is out of temp doesn't go to plants
             if self.Temperature < (IDEAL_TEMP - TEMP_THRESHOLD):
