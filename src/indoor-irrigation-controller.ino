@@ -30,7 +30,7 @@
 #define RECYCLE_VALVE_CONTROL       4
 #define RECYCLE_VALVE_INPUT         3
 #define OUTPUT_VALVE_CONTROL        2
-#define OUTPUT_VALVE_INPUT          A0
+#define OUTPUT_VALVE_INPUT          A7
 
 
 // Constants
