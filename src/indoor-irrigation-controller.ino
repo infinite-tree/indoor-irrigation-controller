@@ -57,9 +57,18 @@ void debug(String msg)
 }
 
 
+float mapf(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 float convertToFahrenheit(float value) {
     // FIXME: Implement conversion function or lookup table
-    return value;
+    // 130F = 48
+    // 44F = 280
+
+    // If linear 87F == 164
+    return mapf(value, 280.0, 48.0, 44.0, 130.0);
 }
 
 void readTemperature() {
