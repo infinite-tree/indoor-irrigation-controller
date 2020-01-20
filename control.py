@@ -115,6 +115,8 @@ class Arduino(object):
         else:
             self.Stream = FakeSerial(self.Log)
 
+        # Throw away some garbage at the begining
+        self.Stream.readline()
         if self._sendData('I') == 'I':
             return
         # still not reset
@@ -143,7 +145,6 @@ class Arduino(object):
         return response
 
     def _sendData(self, value):
-        self._readResponse()
         v = bytes(value, 'utf-8')
         self.Log.debug("SERIAL - Sending: %s" % (v))
         self.Stream.write(v)
