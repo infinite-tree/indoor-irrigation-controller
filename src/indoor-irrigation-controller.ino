@@ -269,26 +269,26 @@ void loop() {
         switch(code) {
             case 'C':
                 // Pulse the cold valve a little more open
-                Serial.println('C');
                 pulseColdOpen();
+                Serial.println('C');
                 break;
 
             case 'c':
                 // Pulse the cold valve a little more closed
-                Serial.println('c');
                 pulseColdClosed();
+                Serial.println('c');
                 break;
 
             case 'H':
                 // Pulse the hot valve a little more open
-                Serial.println('H');
                 pulseHotOpen();
+                Serial.println('H');
                 break;
 
             case 'h':
                 // Pulse the hot valve a little more closed
-                Serial.println('h');
                 pulseHotClosed();
+                Serial.println('h');
                 break;
 
             case 'I':
@@ -297,38 +297,38 @@ void loop() {
 
             case 'O':
                 // Open the output valve
-                Serial.println('O');
                 openOutput();
+                Serial.println('O');
                 break;
 
             case 'o':
                 // Close the output valve
-                Serial.println('o');
                 closeOutput();
+                Serial.println('o');
                 break;
 
             case 'P':
                 // Turn on the pump
-                Serial.println('P');
                 startPump();
+                Serial.println('P');
                 break;
 
             case 'p':
                 // Turn off the pump
-                Serial.println('p');
                 stopPump();
+                Serial.println('p');
                 break;
 
             case 'R':
                 // Open the recirculation valve
-                Serial.println('R');
                 openRecirculation();
+                Serial.println('R');
                 break;
 
             case 'r':
                 // Close the recirculation valve
-                Serial.println('r');
                 closeRecirculation();
+                Serial.println('r');
                 break;
 
             case 'T':
