@@ -16,6 +16,11 @@ import widgets
 PRODUCTION = os.getenv("PRODUCTION")
 SERIAL_PATTERN = "/dev/ttyUSB*"
 
+if PRODUCTION:
+    START_CONTROL_DELAY = 60*3
+else:
+    START_CONTROL_DELAY = 12
+
 UPDATE_DELAY = 5
 IDEAL_TEMP = 72.0
 TEMP_THRESHOLD = 2.0
@@ -340,9 +345,11 @@ class RecirculationControl(OnOffValveControl):
     def handleOpen(self):
         self.Log.debug("recirculation open")
         self.Arduino.openRecycle()
+        self.Arduino.startRecyclePump()
 
     def handleClose(self):
         self.Log.debug("recirculation close")
+        self.Arduino.stopRecyclePump()
         self.Arduino.closeRecycle()
 
 
@@ -394,6 +401,7 @@ class TempControl(object):
         self.LastUpdate = 0
         self.LastControl = 0
         self.Running = False
+        self.Startup = False
         self.updateStatus()
         self.handleStop()
 
@@ -416,16 +424,20 @@ class TempControl(object):
     def handleStart(self):
         self.Log.info("Starting Temp Controller")
         self.startRecycle()
-        for x in range(5):
-            self.Arduino.pulseOpenCold()
+        for x in range(10):
+            # self.Arduino.pulseOpenCold()
             self.Arduino.pulseOpenHot()
 
+        self.Startup = True
         self.Running = True
         self.AtTemp = 0
-        self.LastControl = time.time()
+        # Don't start controlling the water temp until hot water has
+        # had time to move through the supply lines
+        self.LastControl = time.time() + START_CONTROL_DELAY
         self.updateStatus()
 
     def handleStop(self):
+        self.Startup = False
         self.Running = False
         self.AtTemp = 0
         self.Log.info("Stopping Temp Controller")
@@ -452,6 +464,19 @@ class TempControl(object):
             self.OutputOpen = (states['output'] == "OPEN")
             self.Temperature = self.Arduino.getTemperature()
             self.LastUpdate = now
+        
+        # Startup Control Logic
+        if self.Startup:
+            if now - self.LastControl > UPDATE_DELAY:
+                # First action after hot has been running
+                for x in range(5):
+                    self.Arduino.pulseCloseHot()
+                    self.Arduino.pulseOpenCold()
+                
+                self.LastControl = now + START_CONTROL_DELAY/2
+                self.Startup = False
+            else:
+                return
         
         # Control logic
         if self.Running and now - self.LastControl > UPDATE_DELAY:
