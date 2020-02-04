@@ -24,7 +24,7 @@ else:
 UPDATE_DELAY = 5
 IDEAL_TEMP = 72.0
 TEMP_THRESHOLD = 2.0
-TEMP_HOLD = 15/UPDATE_DELAY
+TEMP_HOLD = 25/UPDATE_DELAY
 
 
 def scale(x, in_min, in_max, out_min, out_max):
@@ -168,18 +168,31 @@ class Arduino(object):
         }
         return state
 
-    def getTemperature(self):
-        # This should only be called via the WaterMeter class
+    def _convertFloat(self, value):
         try:
-            return float(self._sendData("T"))
+            return float(value)
         except Exception:
+            return None
+
+    def getTemperature(self):
+        result = self._convertFloat(self._sendData("T"))
+        if result is None:
+            result = self._convertFloat(self._readResponse())
+
+        if result is None:
             self.Log.error(
                 "float conversion failed for Arduino.getTemperature()")
             return 0.0
 
+        return result
+
     def _controlValve(self, value):
         if self._sendData(str(value)) == str(value):
             return True
+        elif self._readResponse() == str(value):
+            return True
+        else:
+            self.Log.error("Arduino command %s Failed." % value)
         return False
 
     def pulseOpenCold(self):
@@ -458,6 +471,7 @@ class TempControl(object):
         now = time.time()
         if now - self.LastUpdate > 1:
             states = self.Arduino.getValveStates()
+            self.Log.debug("Valve States: %s" % states)
             self.HotValvePercent = states['hot']
             self.ColdValvePercent = states['cold']
             self.RecirculationValveOpen = (states['recycle'] == "OPEN")
@@ -506,7 +520,7 @@ class TempControl(object):
             # TODO: This might lead to huge swings since it will tend to
             #       max out hot and cold first (but we want full pressure/flow)
             if self.Temperature < IDEAL_TEMP:
-                if self.HotValvePercent > 100:
+                if self.HotValvePercent < 100:
                     self.Arduino.pulseOpenHot()
                 elif self.ColdValvePercent > 0:
                     self.Arduino.pulseCloseCold()
