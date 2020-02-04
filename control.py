@@ -17,9 +17,9 @@ PRODUCTION = os.getenv("PRODUCTION")
 SERIAL_PATTERN = "/dev/ttyUSB*"
 
 if PRODUCTION:
-    START_CONTROL_DELAY = 60*3
+    START_CONTROL_DELAY = 30
 else:
-    START_CONTROL_DELAY = 12
+    START_CONTROL_DELAY = 6
 
 UPDATE_DELAY = 5
 IDEAL_TEMP = 72.0
@@ -443,11 +443,11 @@ class TempControl(object):
         self.Log.info("Stopping Temp Controller")
         self.Arduino.closeOutput()
         self.stopRecycle()
-        for x in range(int(self.HotValvePercent/10)):
+        for x in range(int(self.HotValvePercent/10+1)):
             self.Arduino.pulseCloseHot()
-        for x in range(int(self.ColdValvePercent/10)):
+        for x in range(int(self.ColdValvePercent/10)+1):
             self.Arduino.pulseCloseCold()
-
+        
     def handleEvent(self, event):
         # if event.type == MOUSEBUTTONDOWN:
         #     self.ReturnButton.handleClick(event.pos)
